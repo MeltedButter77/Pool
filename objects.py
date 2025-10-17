@@ -133,10 +133,14 @@ class Table:
         for current_ball in self.balls:
             if current_ball.velocity.length() < 0.01:  # Only calculate collisions for moving balls
                 continue
+            if not current_ball.on_board:
+                continue
 
             # --- 1. Ball–Ball Collisions ---
             for other_ball in self.balls:
                 if current_ball == other_ball:  # Skip comparing self
+                    continue
+                if not other_ball.on_board:
                     continue
 
                 delta_pos = current_ball.position - other_ball.position
