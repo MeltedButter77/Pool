@@ -135,6 +135,9 @@ class Table:
         draw_surface.blit(self.surface, self.rect)
 
         if self.mouse_down_pos:
+            # Draw mouse down pos
+            pygame.draw.circle(draw_surface, "white", self.mouse_down_pos + pygame.math.Vector2(self.rect.topleft), 7, 3)
+
             pos = pygame.mouse.get_pos()  # gets SCREEN pos
             current_mouse_pos = (pos[0] - self.rect.x, pos[1] - self.rect.y)  # Converts to table surface pos
 
