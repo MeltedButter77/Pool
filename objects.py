@@ -23,7 +23,6 @@ class Ball:
         self.on_board = True
 
         self.drag = 0.02  # Higher = More drag
-        self.cue_strength = 0.1  # Higher = Stronger
 
         self.type = "solid"
         if id > 8:
@@ -36,7 +35,7 @@ class Ball:
         self.velocity *= 1 - self.drag
 
     def move(self, vector):
-        self.velocity += vector * self.cue_strength
+        self.velocity += vector
 
     def draw(self, surface):
         if self.type == "solid":
@@ -66,6 +65,9 @@ class Table:
         self.hole_offset = self.wall_offset * 1  # 1 = hole center on wall, <1 = hole inside wall, >1 = hole more on felt
         self.hole_radius = ball_radius * 1.5
         self.hole_strength = 0.7  # Higher = stronger
+
+        self.max_cue_strength = 150
+        self.cue_strength = 0.2  # Higher = Stronger
 
         for x in range(3):
             for y in range(2):
@@ -103,11 +105,17 @@ class Table:
     def draw(self, draw_surface):
         self.surface.fill(self.color)
 
-        # draw cue line
+        # draw prediction line
         if self.mouse_down_pos:
             pos = pygame.mouse.get_pos()  # gets SCREEN pos
             current_mouse_pos = (pos[0] - self.rect.x, pos[1] - self.rect.y)  # Converts to table surface pos
-            pygame.draw.line(self.surface, "white", self.balls[0].position, self.balls[0].position + pygame.math.Vector2(current_mouse_pos) - pygame.math.Vector2(self.mouse_down_pos))
+
+            # Prediction line
+            direction = pygame.math.Vector2(self.mouse_down_pos) - pygame.math.Vector2(current_mouse_pos)
+            start_pos = self.balls[0].position
+            if direction.length() > 0:
+                end_pos = start_pos + direction.normalize() * max(self.rect.w, self.rect.h)
+                pygame.draw.line(self.surface, "white", start_pos, end_pos)
 
         # draw walls
         wall_rect = self.rect.copy()
@@ -125,6 +133,20 @@ class Table:
 
         # draw game to screen
         draw_surface.blit(self.surface, self.rect)
+
+        if self.mouse_down_pos:
+            pos = pygame.mouse.get_pos()  # gets SCREEN pos
+            current_mouse_pos = (pos[0] - self.rect.x, pos[1] - self.rect.y)  # Converts to table surface pos
+
+            # Cue line
+            cue_length = 150
+            direction = pygame.math.Vector2(current_mouse_pos) - pygame.math.Vector2(self.mouse_down_pos)
+            if direction.length() > 0:
+                if direction.length() > self.max_cue_strength:
+                    direction.scale_to_length(self.max_cue_strength)
+                start_pos = pygame.math.Vector2(self.rect.topleft) + self.balls[0].position + direction.normalize() * direction.length()
+                end_pos = pygame.math.Vector2(self.rect.topleft) + self.balls[0].position + direction.normalize() * (direction.length() + cue_length)
+                pygame.draw.line(draw_surface, "brown", start_pos, end_pos, 10)
 
     def update(self):
         for ball in self.balls:
@@ -217,7 +239,9 @@ class Table:
             vector *= -1
             self.mouse_down_pos = None
 
-            self.balls[0].move(vector)
+            if vector.length() > self.max_cue_strength:
+                vector.scale_to_length(self.max_cue_strength)
+            self.balls[0].move(vector * self.cue_strength)
 
         # Touch input (mobile)
         elif event.type == pygame.FINGERDOWN:
@@ -233,4 +257,7 @@ class Table:
             vector = pygame.math.Vector2(mouse_up_pos) - pygame.math.Vector2(self.mouse_down_pos)
             vector *= -1
             self.mouse_down_pos = None
-            self.balls[0].move(vector)
+
+            if vector.length() > self.max_cue_strength:
+                vector.scale_to_length(self.max_cue_strength)
+            self.balls[0].move(vector * self.cue_strength)
