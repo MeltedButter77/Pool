@@ -183,3 +183,19 @@ class Table:
             self.mouse_down_pos = None
 
             self.balls[0].move(vector)
+
+        # Touch input (mobile)
+        elif event.type == pygame.FINGERDOWN:
+            # Convert normalized touch coordinates to screen pixels
+            x = event.x * self.screen.get_width()
+            y = event.y * self.screen.get_height()
+            self.mouse_down_pos = (x - self.rect.x, y - self.rect.y)
+
+        elif event.type == pygame.FINGERUP:
+            x = event.x * self.screen.get_width()
+            y = event.y * self.screen.get_height()
+            mouse_up_pos = (x - self.rect.x, y - self.rect.y)
+            vector = pygame.math.Vector2(mouse_up_pos) - pygame.math.Vector2(self.mouse_down_pos)
+            vector *= -1
+            self.mouse_down_pos = None
+            self.balls[0].move(vector)
