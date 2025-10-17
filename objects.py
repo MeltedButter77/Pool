@@ -59,6 +59,8 @@ class Table:
 
         self.balls = []
 
+        self.wall_offset = 15
+
         if mode == "8-ball":
             r = ball_radius
             rack_location = (200, self.rect.height // 2)
@@ -100,6 +102,12 @@ class Table:
             current_mouse_pos = (pos[0] - self.rect.x, pos[1] - self.rect.y)  # Converts to table surface pos
             pygame.draw.line(self.surface, "white", self.balls[0].position, self.balls[0].position + pygame.math.Vector2(current_mouse_pos) - pygame.math.Vector2(self.mouse_down_pos))
 
+        # draw walls
+        wall_rect = self.rect.copy()
+        wall_rect.topleft = (0, 0)
+        pygame.draw.rect(self.surface, "black", wall_rect, self.wall_offset)
+
+        # draw game to screen
         draw_surface.blit(self.surface, self.rect)
 
     def update(self):
@@ -131,7 +139,7 @@ class Table:
                     if vel_along_normal > 0:  # Balls are separating
                         continue
 
-                    # Elastic collision for equal mass (found online)
+                    # Elastic collision for equal mass (from hs physics / found online)
                     # v1' = v1 - (v_rel · n) * n
                     # v2' = v2 + (v_rel · n) * n
                     # This swaps the normal velocity components while preserving momentum.
@@ -145,29 +153,30 @@ class Table:
 
             # --- 2. Ball–Wall Collisions (within self.rect) ---
             # LEFT wall
-            if current_ball.position.x - current_ball.radius < 0:
-                current_ball.position.x = 0 + current_ball.radius
+            if current_ball.position.x - current_ball.radius < 0 + self.wall_offset:
+                current_ball.position.x = 0 + current_ball.radius + self.wall_offset
                 current_ball.velocity.x *= -1  # Reflect X velocity
 
             # RIGHT wall
-            if current_ball.position.x + current_ball.radius > self.rect.width:
-                current_ball.position.x = self.rect.width - current_ball.radius
+            if current_ball.position.x + current_ball.radius > self.rect.width - self.wall_offset:
+                current_ball.position.x = self.rect.width - current_ball.radius - self.wall_offset
                 current_ball.velocity.x *= -1
 
             # TOP wall
-            if current_ball.position.y - current_ball.radius < 0:
-                current_ball.position.y = 0 + current_ball.radius
+            if current_ball.position.y - current_ball.radius < 0 + self.wall_offset:
+                current_ball.position.y = 0 + current_ball.radius + self.wall_offset
                 current_ball.velocity.y *= -1
 
             # BOTTOM wall
-            if current_ball.position.y + current_ball.radius > self.rect.height:
-                current_ball.position.y = self.rect.height - current_ball.radius
+            if current_ball.position.y + current_ball.radius > self.rect.height - self.wall_offset:
+                current_ball.position.y = self.rect.height - current_ball.radius - self.wall_offset
                 current_ball.velocity.y *= -1
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
             self.mouse_down_pos = (event.pos[0] - self.rect.x, event.pos[1] - self.rect.y)
-        if event.type == pygame.MOUSEBUTTONUP:
+
+        elif event.type == pygame.MOUSEBUTTONUP:
             mouse_up_pos = (event.pos[0] - self.rect.x, event.pos[1] - self.rect.y)
             vector = pygame.math.Vector2(mouse_up_pos) - pygame.math.Vector2(self.mouse_down_pos)
             vector *= -1
