@@ -31,6 +31,7 @@ class Ball:
         self.color = ball_colors[id]
 
     def update(self):
+        if not self.on_board: return
         self.position += self.velocity
         self.velocity *= 1 - self.drag
 
@@ -43,6 +44,10 @@ class Ball:
         else:
             pygame.draw.circle(surface, self.color, self.position, self.radius)
             pygame.draw.circle(surface, "white", self.position, self.radius, 3)
+
+    def sink(self):
+        self.on_board = False
+        self.velocity = pygame.Vector2(0, 0)
 
 
 class Table:
@@ -106,7 +111,7 @@ class Table:
         self.surface.fill(self.color)
 
         # draw prediction line
-        if self.mouse_down_pos:
+        if self.mouse_down_pos and self.balls[0].on_board:
             pos = pygame.mouse.get_pos()  # gets SCREEN pos
             current_mouse_pos = (pos[0] - self.rect.x, pos[1] - self.rect.y)  # Converts to table surface pos
 
@@ -131,10 +136,14 @@ class Table:
             if ball.on_board:
                 ball.draw(self.surface)
 
+        # Draw placing white ball
+        if not self.balls[0].on_board:
+            self.balls[0].draw(self.surface)
+
         # draw game to screen
         draw_surface.blit(self.surface, self.rect)
 
-        if self.mouse_down_pos:
+        if self.mouse_down_pos and self.balls[0].on_board:
             # Draw mouse down pos
             pygame.draw.circle(draw_surface, "white", self.mouse_down_pos + pygame.math.Vector2(self.rect.topleft), 7, 3)
 
@@ -152,27 +161,30 @@ class Table:
                 pygame.draw.line(draw_surface, "brown", start_pos, end_pos, 10)
 
     def update(self):
+        # Update placing white ball
+        if not self.balls[0].on_board:
+            pos = pygame.mouse.get_pos()
+            self.balls[0].position = pygame.Vector2(pos[0] - self.rect.x, pos[1] - self.rect.y)
+
         for ball in self.balls:
             ball.update()
 
         for current_ball in self.balls:
             if current_ball.velocity.length() < 0.01:  # Only calculate collisions for moving balls
                 continue
-            if not current_ball.on_board:
+            if not current_ball.on_board:  # Only calc for balls on the board
                 continue
 
-            # --- 1. Ball–Ball Collisions ---
+            # --- Ball–Ball Collisions ---
             for other_ball in self.balls:
-                if current_ball == other_ball:  # Skip comparing self
-                    continue
-                if not other_ball.on_board:
+                if self == other_ball:  # Skip comparing self
                     continue
 
                 delta_pos = current_ball.position - other_ball.position
                 distance = delta_pos.length()
                 min_dist = current_ball.radius + other_ball.radius
 
-                if distance < min_dist:
+                if distance < min_dist and delta_pos.length() > 0:
                     # Get collision normal
                     n = delta_pos.normalize()
 
@@ -196,37 +208,32 @@ class Table:
                     current_ball.position += n * overlap
                     other_ball.position -= n * overlap
 
-            # --- 3. Hole Collisions ---
+            # --- Holes ---
             for hole_pos in self.holes:
                 delta_pos = current_ball.position - hole_pos
                 distance = delta_pos.length()
                 min_dist = current_ball.radius + self.hole_radius
                 if distance < min_dist:
                     n = delta_pos.normalize()
-
                     # Attract overlapping balls
                     overlap = (min_dist - distance) / 2
                     current_ball.position -= n * overlap * self.hole_strength
-
                 if distance < 15:
-                    current_ball.on_board = False
+                    current_ball.sink()
 
-            # --- 2. Ball–Wall Collisions (within self.rect) ---
+            # --- Walls --
             # LEFT wall
             if current_ball.position.x - current_ball.radius < 0 + self.wall_offset:
                 current_ball.position.x = 0 + current_ball.radius + self.wall_offset
                 current_ball.velocity.x *= -1  # Reflect X velocity
-
             # RIGHT wall
             if current_ball.position.x + current_ball.radius > self.rect.width - self.wall_offset:
                 current_ball.position.x = self.rect.width - current_ball.radius - self.wall_offset
                 current_ball.velocity.x *= -1
-
             # TOP wall
             if current_ball.position.y - current_ball.radius < 0 + self.wall_offset:
                 current_ball.position.y = 0 + current_ball.radius + self.wall_offset
                 current_ball.velocity.y *= -1
-
             # BOTTOM wall
             if current_ball.position.y + current_ball.radius > self.rect.height - self.wall_offset:
                 current_ball.position.y = self.rect.height - current_ball.radius - self.wall_offset
@@ -234,33 +241,20 @@ class Table:
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
-            self.mouse_down_pos = (event.pos[0] - self.rect.x, event.pos[1] - self.rect.y)
+            self.mouse_down_pos = pygame.math.Vector2(event.pos[0] - self.rect.x, event.pos[1] - self.rect.y)
+
+            if not self.balls[0].on_board:
+                self.balls[0].position = pygame.Vector2(self.mouse_down_pos)
+                self.balls[0].on_board = True
+                self.mouse_down_pos = None  # Clears the selection i.e ball doesn't get shot right as u place it
 
         elif event.type == pygame.MOUSEBUTTONUP:
-            mouse_up_pos = (event.pos[0] - self.rect.x, event.pos[1] - self.rect.y)
-            vector = pygame.math.Vector2(mouse_up_pos) - pygame.math.Vector2(self.mouse_down_pos)
-            vector *= -1
+            if self.mouse_down_pos and self.balls[0].on_board:
+                mouse_up_pos = (event.pos[0] - self.rect.x, event.pos[1] - self.rect.y)
+                vector = pygame.math.Vector2(mouse_up_pos) - pygame.math.Vector2(self.mouse_down_pos)
+                vector *= -1
+
+                if vector.length() > self.max_cue_strength:
+                    vector.scale_to_length(self.max_cue_strength)
+                self.balls[0].move(vector * self.cue_strength)
             self.mouse_down_pos = None
-
-            if vector.length() > self.max_cue_strength:
-                vector.scale_to_length(self.max_cue_strength)
-            self.balls[0].move(vector * self.cue_strength)
-
-        # Touch input (mobile)
-        elif event.type == pygame.FINGERDOWN:
-            # Convert normalized touch coordinates to screen pixels
-            x = event.x * self.screen.get_width()
-            y = event.y * self.screen.get_height()
-            self.mouse_down_pos = (x - self.rect.x, y - self.rect.y)
-
-        elif event.type == pygame.FINGERUP:
-            x = event.x * self.screen.get_width()
-            y = event.y * self.screen.get_height()
-            mouse_up_pos = (x - self.rect.x, y - self.rect.y)
-            vector = pygame.math.Vector2(mouse_up_pos) - pygame.math.Vector2(self.mouse_down_pos)
-            vector *= -1
-            self.mouse_down_pos = None
-
-            if vector.length() > self.max_cue_strength:
-                vector.scale_to_length(self.max_cue_strength)
-            self.balls[0].move(vector * self.cue_strength)
