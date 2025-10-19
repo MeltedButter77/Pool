@@ -27,7 +27,7 @@ class Ball:
         self.type = "solid"
         if id > 8:
             id -= 8
-            self.type = "strip"
+            self.type = "stripe"
         self.color = ball_colors[id]
 
     def update(self):
@@ -38,11 +38,12 @@ class Ball:
     def move(self, vector):
         self.velocity += vector
 
-    def draw(self, surface):
-        if self.type == "solid":
-            pygame.draw.circle(surface, self.color, self.position, self.radius)
+    def draw(self, surface, color_override=None):
+        if color_override:
+            pygame.draw.circle(surface, color_override, self.position, self.radius)
         else:
             pygame.draw.circle(surface, self.color, self.position, self.radius)
+        if self.type == "stripe":
             pygame.draw.circle(surface, "white", self.position, self.radius, 3)
 
     def sink(self):
@@ -67,6 +68,7 @@ class Table:
         self.holes = []
 
         self.wall_offset = 20  # wall thickness
+        self.white_line_dist = 500
         self.hole_offset = self.wall_offset * 1  # 1 = hole center on wall, <1 = hole inside wall, >1 = hole more on felt
         self.hole_radius = ball_radius * 1.5
         self.hole_strength = 0.7  # Higher = stronger
@@ -84,7 +86,7 @@ class Table:
             dx = r * 2 * 0.87  # horizontal spacing (cos(30°) * diameter)
             self.balls = [
                 # cue ball
-                Ball(0, (400, rack_location[1])),
+                Ball(0, (self.wall_offset + self.white_line_dist, rack_location[1])),
                 # first row
                 Ball(1, (rack_location[0], rack_location[1])),
                 # second row
@@ -109,6 +111,14 @@ class Table:
 
     def draw(self, draw_surface):
         self.surface.fill(self.color)
+
+        # Draw white line
+        pygame.draw.line(self.surface, "white",
+                        (self.wall_offset + self.white_line_dist - 1, 0),
+                        (self.wall_offset + self.white_line_dist - 1, self.rect.h),
+                        2,
+                        )
+        pygame.draw.circle(self.surface, "white",(self.wall_offset + self.white_line_dist, self.rect.h//2), 3)
 
         # draw prediction line
         if self.mouse_down_pos and self.balls[0].on_board:
@@ -138,7 +148,10 @@ class Table:
 
         # Draw placing white ball
         if not self.balls[0].on_board:
-            self.balls[0].draw(self.surface)
+            if self.is_white_valid():
+                self.balls[0].draw(self.surface)
+            else:
+                self.balls[0].draw(self.surface, "red")
 
         # draw game to screen
         draw_surface.blit(self.surface, self.rect)
@@ -243,8 +256,7 @@ class Table:
         if event.type == pygame.MOUSEBUTTONDOWN:
             self.mouse_down_pos = pygame.math.Vector2(event.pos[0] - self.rect.x, event.pos[1] - self.rect.y)
 
-            if not self.balls[0].on_board:
-                self.balls[0].position = pygame.Vector2(self.mouse_down_pos)
+            if not self.balls[0].on_board and self.is_white_valid():
                 self.balls[0].on_board = True
                 self.mouse_down_pos = None  # Clears the selection i.e ball doesn't get shot right as u place it
 
@@ -258,3 +270,32 @@ class Table:
                     vector.scale_to_length(self.max_cue_strength)
                 self.balls[0].move(vector * self.cue_strength)
             self.mouse_down_pos = None
+
+    def is_white_valid(self):
+        white_ball = self.balls[0]
+
+        for other_ball in self.balls:
+            if white_ball == other_ball:  # Skip comparing self
+                continue
+
+            delta_pos = white_ball.position - other_ball.position
+            distance = delta_pos.length()
+            min_dist = white_ball.radius + other_ball.radius
+
+            if distance < min_dist:
+                return False
+
+        # LEFT wall
+        if white_ball.position.x < 0 + self.wall_offset + self.white_line_dist:
+            white_ball.position.x = self.wall_offset + self.white_line_dist
+        # RIGHT wall
+        if white_ball.position.x + white_ball.radius > self.rect.width - self.wall_offset:
+            white_ball.position.x = self.rect.width - white_ball.radius - self.wall_offset
+        # TOP wall
+        if white_ball.position.y - white_ball.radius < 0 + self.wall_offset:
+            white_ball.position.y = 0 + white_ball.radius + self.wall_offset
+        # BOTTOM wall
+        if white_ball.position.y + white_ball.radius > self.rect.height - self.wall_offset:
+            white_ball.position.y = self.rect.height - white_ball.radius - self.wall_offset
+
+        return True
