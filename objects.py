@@ -192,7 +192,7 @@ class Table:
             for other_ball in self.balls:
                 if self == other_ball:  # Skip comparing self
                     continue
-                if not current_ball.on_board:  # Only calc for balls on the board
+                if not other_ball.on_board:  # Only calc for balls on the board
                     continue
 
                 delta_pos = current_ball.position - other_ball.position
